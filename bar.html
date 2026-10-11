@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Bar - Sistema Offline</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 15px; background-color: #f4f4f4; margin: 0; }
+        h1 { color: #333; font-size: 24px; margin-top: 10px; }
+        h2 { color: #555; font-size: 18px; margin-bottom: 10px; }
+        .card { background: white; padding: 15px; border-radius: 8px; margin-bottom: 15px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        .saldo { font-size: 28px; font-weight: bold; color: #007bff; text-align: center; margin: 10px 0; }
+        button { width: 100%; padding: 15px; font-size: 18px; border: none; border-radius: 8px; cursor: pointer; margin-top: 10px; font-weight: bold; }
+        .btn-azul { background-color: #007bff; color: white; }
+        .btn-verde { background-color: #28a745; color: white; }
+        .btn-vermelho { background-color: #dc3545; color: white; }
+        input { width: 100%; padding: 15px; font-size: 20px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 8px; margin-bottom: 5px; text-align: center; }
+        #listaVendas li { margin-bottom: 8px; font-size: 14px; border-bottom: 1px solid #eee; padding-bottom: 8px; list-style: none; }
+        .voltar { text-align: center; margin-top: 20px; }
+        .voltar a { color: #007bff; text-decoration: none; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+    <h1>🍔 Bar / Lanchonete</h1>
+
+    <div class="card">
+        <h2>Saldo do Cartão</h2>
+        <div class="saldo">R$ <span id="saldo">0.00</span></div>
+        <button class="btn-azul" onclick="simularLeitura()">📖 Simular Leitura do Cartão</button>
+    </div>
+
+    <div class="card">
+        <h2>Nova Venda</h2>
+        <input type="number" id="valorVenda" placeholder="Valor do pedido" step="0.01" inputmode="decimal">
+        <button class="btn-verde" onclick="registrarVenda()">💸 Debitar e Registrar</button>
+    </div>
+
+    <div class="card">
+        <h2>Histórico de Vendas</h2>
+        <ul id="listaVendas" style="padding: 0;"></ul>
+        <button class="btn-vermelho" onclick="exportarCSV()">📥 Exportar CSV</button>
+        <button class="btn-azul" onclick="limparDados()" style="margin-top: 5px;">🗑️ Limpar Tudo</button>
+    </div>
+
+    <div class="voltar">
+        <a href="index.html">← Voltar para o Início</a>
+    </div>
+
+    <script>
+        let saldoAtual = 0;
+        let vendas = JSON.parse(localStorage.getItem('vendas_bar') || '[]');
+
+        // Simula a leitura do cartão NFC (depois isso virá do hardware)
+        function simularLeitura() {
+            const saldoSimulado = prompt("Simulando leitura NFC. Digite o saldo que está no cartão:", "200.00");
+            if (saldoSimulado !== null) {
+                saldoAtual = parseFloat(saldoSimulado) || 0;
+                document.getElementById('saldo').textContent = saldoAtual.toFixed(2);
+                alert("Cartão lido com sucesso!");
+            }
+        }
+
+        function registrarVenda() {
+            const inputValor = document.getElementById('valorVenda');
+            const valor = parseFloat(inputValor.value);
+
+            if (isNaN(valor) || valor <= 0) return alert('Digite um valor válido.');
+            if (valor > saldoAtual) return alert('Saldo insuficiente no cartão!');
+
+            // 1. Debita o saldo
+            saldoAtual -= valor;
+            document.getElementById('saldo').textContent = saldoAtual.toFixed(2);
+
+            // 2. Cria o registro da venda
+            const novaVenda = {
+                data: new Date().toISOString(),
+                valor: valor,
+                saldoRestante: saldoAtual
+            };
+
+            // 3. Salva no histórico
+            vendas.push(novaVenda);
+            localStorage.setItem('vendas_bar', JSON.stringify(vendas));
+            
+            // 4. Limpa o input e atualiza a tela
+            inputValor.value = '';
+            renderizarVendas();
+            alert(`Venda de R$ ${valor.toFixed(2)} registrada! Novo saldo: R$ ${saldoAtual.toFixed(2)}`);
+        }
+
+        function renderizarVendas() {
+            const lista = document.getElementById('listaVendas');
+            if (vendas.length === 0) {
+                lista.innerHTML = '<li style="color: #999;">Nenhuma venda registrada.</li>';
+                return;
+            }
+            lista.innerHTML = vendas.map(v => 
+                `<li>${new Date(v.data).toLocaleString('pt-BR')} <br> Venda: R$ ${v.valor.toFixed(2)} | Saldo: R$ ${v.saldoRestante.toFixed(2)}</li>`
+            ).join('');
+        }
+
+        function exportarCSV() {
+            if (vendas.length === 0) return alert('Nenhuma venda para exportar.');
+            
+            const cabecalho = 'Data;Valor;Saldo Restante\n';
+            const linhas = vendas.map(v => 
+                `${new Date(v.data).toLocaleString('pt-BR')};${v.valor};${v.saldoRestante}`
+            ).join('\n');
+
+            const blob = new Blob([cabecalho + linhas], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = `vendas_bar_${new Date().toISOString().slice(0,10)}.csv`;
+            link.click();
+        }
+
+        function limparDados() {
+            if (confirm('Tem certeza que deseja apagar todo o histórico de vendas?')) {
+                vendas = [];
+                localStorage.removeItem('vendas_bar');
+                renderizarVendas();
+                alert('Histórico limpo!');
+            }
+        }
+
+        // Inicializa a tela
+        renderizarVendas();
+    </script>
+</body>
+</html>
